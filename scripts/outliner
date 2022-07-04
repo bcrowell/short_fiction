@@ -1,0 +1,169 @@
+#!/usr/bin/perl
+
+use strict;
+
+# converts plain-text input file to html
+# reads stdin, writes stdout
+# To add an accented character, see short_story_ms.
+
+# format of input file:
+# a line beginning with dashes is part of the outline
+# first line of file should be b/Title/, and isn't really typeset as bold
+# comment lines have # as very first character on the line
+# italicized text has i/.../
+# links are like l{slashdot.org}
+# *** on a line by itself makes division between scenes
+# --- em dash
+# "..." double quotes
+# `...' single quotes (not '...', which produces confusion with apostrophes)
+# &     encoded correctly for html as &amp;
+# for accented characters, just use Unicode (see Unix notes for how to produce them)
+
+my $curly = "(?:(?:{[^{}]*}|[^{}]*)*)"; # match anything, as long as curly braces in it are matched, and not nested
+my $curlycurly = "(?:(?:{$curly}|$curly)*)"; # allow one level of nesting
+my $curlycurlycurly = "(?:(?:{$curlycurly}|$curlycurly)*)"; # allow two levels of nesting
+
+my $more_head_stuff = '';
+
+# The following makes accents display correctly in unicode:
+print <<HEADER;
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html><head>
+  $more_head_stuff
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  </head><body>
+HEADER
+
+my $max_depth = 10;
+my $deepest_level_used = 0;
+my @out;
+my @out_headers = ();
+my $out_body = '';
+
+for (my $level=1; $level<$max_depth; $level++) {
+  $out[$level] = {text=>'',count=>0};
+}
+
+our $body_buf = '';
+my $line_count = 0;
+my $word_count = 0;
+my %word_count_by_chapter = ();
+my %name_of_chapter = ();
+our $word_count_this_chapter = 0;
+my $last_chapter;
+my $did_title = 0;
+while (my $line=<STDIN>) {
+  chomp $line;
+  next if $line =~ m/^\#/;
+  while ($line=~m/([\w"'][^\s]+)/g) {
+    ++$word_count;
+    ++$word_count_this_chapter;
+    #print STDERR "<$1> ";
+  }
+  ++$line_count;
+  unless ($did_title) {
+    # first b// is title
+    $line =~ s@b/([^/]*)/@$1@;
+    $did_title = 1;
+  }
+  my $header = '';
+  my $dashes;
+  my $depth = 0;
+  if ($line=~m/^(\-+)([a-zA-Z0-9].*)/) { # The first character in the second () can't be a space, because then we get problems with m-hyphens, ---, being confused with headers.
+    ($dashes,$header) = ($1,$2);
+    $depth = length $dashes;
+  }
+  if ($dashes eq '') {
+    $body_buf = "$body_buf $line\n";
+  }
+  else { # $depth=1,2,...
+    flush_body_buf();
+    my $begin_h = "<h$depth>";
+    my $end_h = "</h$depth>";
+    my $c = ++($out[$depth]->{count});
+    $name_of_chapter{$c} = $header;
+    $last_chapter = $c;
+    if ($depth==1 && $c>1) {
+      flush_word_count_by_chapter($c-1);
+    }
+    $header = "$c. $header" if $depth==1 && ! $header=~/^A\d+^Z/;
+    my $h = "${begin_h}<a href=\"#placeholder\">$header${end_h}</a>";
+    if ($depth>$deepest_level_used) {
+      $deepest_level_used = $depth;
+      die "nesting too deep, at line $line_count, $line" if $deepest_level_used>$max_depth;
+    }
+    my $own_label;
+    for (my $level=$depth; $level<=$max_depth; $level++) {
+      my $label = $level;
+      $out[$level]->{count} = 0 if $level>$depth;
+      for (my $i=1; $i<=$depth; $i++) {
+        $label = $label . ($i==1 ? '-' : '.') . ($out[$i]->{count});
+      }
+      my $text_label = $label;
+      $text_label =~ s/^\d+\-//;
+      $own_label = $text_label if $level==$depth;
+      $h =~ s/\#placeholder/\#$text_label/;
+      $out[$level]->{text} = $out[$level]->{text} . "<a name=\"$label\">$h\n";
+    }
+    $out_body = "$out_body<a name=\"$own_label\">$h\n";
+  }
+}
+flush_body_buf();
+for (my $level=1; $level<=$deepest_level_used; $level++) {
+  my $item = $out[$level];
+  print $item->{text} . "\n\n<hr>\n\n";
+}
+$out_body =~ s@TITLEPLACEHOLDER@@;
+$out_body =~ s@</h1>\s*</p>@</h1>\n@;
+$out_body =~ s@<p>\s*(<div class="center">&mdash;</div>)\s*</p>@\n$1\n@g;
+$out_body =~ s@</p>\s*</p>@</p>@;
+print $out_body;
+my $pages = int($word_count/300.);
+ # p. 119 of The Virginian is 350 wds, p. 121 of Hominids is 254 (both paperbacks, second sample
+ # was mainly dialog)
+flush_word_count_by_chapter($last_chapter);
+for (my $c=1; exists $word_count_by_chapter{$c}; ++$c) {
+  my $h = $name_of_chapter{$c};
+  my $w = $word_count_by_chapter{$c};
+  my $x = "chapter $c, $h: ";
+  while (length($x)<40) {$x="$x "}
+  print STDERR "$x$w\n";
+}
+print "</body></html>\n";
+
+print STDERR "$word_count words, $pages pages\n";
+
+sub flush_body_buf { # body_buf holds one paragraph
+  $body_buf =~ s@&@AAAMPERSAND@g;
+  $body_buf =~ s@<@&lt;@g;
+  $body_buf =~ s@>@&gt;@g;
+  $body_buf =~ s@\n\s*\n@\n</p><p>\n@g;
+  $body_buf =~ s@i/([^/]*)\./@<i>$1</i>.@g;
+  $body_buf =~ s@i/([^/]*)/@<i>$1</i>@g;
+  $body_buf =~ s@b/([^/]*)/@<b>$1</b>@g;
+  $body_buf =~ s@---@&mdash;@g;
+  $body_buf =~ s@\s+\n@\n@g;
+  #$body_buf =~ s@\"(([^"\n]+\n?)*)\"@&ldquo;$1&rdquo;@g;
+  $body_buf =~ s@\"(([^"\n]+((?<!<p>)\n)?)*)\"@&ldquo;$1&rdquo;@g;
+  #$body_buf =~ s@\"(([a-zA-Z'.;:?,\- ]+\n?)+)\"@&ldquo;$1&rdquo;@g;
+  $body_buf =~ s@\`([^']*)\'@&lsquo;$1&rsquo;@g;
+  $body_buf =~ s@\*\*\*@<div class="center">&mdash;</div>@g;
+  $body_buf =~ s@^\s*\"@&ldquo;@mg; # multi-paragraph dialog, only a leading quote at start of para
+  $body_buf =~ s@^&rdquo;@&ldquo;@g; # kludge -- why is this necessary?
+  $body_buf =~ s@  +@ @g;
+  $body_buf =~ s@AAAMPERSAND@&amp;@g;
+  $body_buf =~ s@l{([^}]*)}@<a href="$1">$1</a>@g;
+  $body_buf =~ s@<a href="(?!http)([^"]+)">([^<]+)</a>@<a href="http://$1">$2</a>@g;
+  $body_buf =~ s@p{($curlycurlycurly)}{($curlycurlycurly)}@<p class="$1">$2</p>@g;
+  $body_buf =~ s@<p>\s*(<p class="[^"]+">)@$1@g;
+  $body_buf =~ s@</p>\s*</p>@</p>@g;
+
+  $out_body = "$out_body\n<p>$body_buf</p>\n" if $body_buf=~m/[^\s]/;
+  $body_buf = '';
+}
+
+sub flush_word_count_by_chapter {
+  my $c = shift;
+  $word_count_by_chapter{$c} = $word_count_this_chapter;
+  $word_count_this_chapter  = 0;
+}

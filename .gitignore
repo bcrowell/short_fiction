@@ -1,0 +1,12 @@
+*~
+*.aux
+*.log
+*.idx
+*.toc
+*.ilg
+*.bak
+*.html
+*.pdf
+*.tex
+*.rtf
+*.oww

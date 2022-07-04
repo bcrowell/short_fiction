@@ -1,0 +1,345 @@
+#!/usr/bin/perl
+
+use strict;
+
+BEGIN {
+  push @INC,"/home/bcrowell/Documents/programming/scripts";
+}
+our $my_email;
+require "my_email.pl";
+die "\$my_email not set" unless $my_email;
+
+# Takes latex output by novel_to_latex, and fiddles with it to make it appropriate for
+# a short story ms.
+
+#use RTF::TEXT::Converter;
+    # ... rtf2text is part of this, and that's all I actually need; just put this here so that if it wasn't installed, I'd get an error
+    #     Not packaged for Debian. To install it, do cpan RTF::TEXT::Converter
+    #     As of 2011, rtf2text no longer seems to be included in this.
+
+my %opt = ();
+#############################################################################################################
+#           options
+#############################################################################################################
+my $electronic = 1;
+my $baen       = 0; # Baen's wants italics as italics
+my $interzone  = 0;
+my $coyote     = 0;
+my $anthologybuilder = 0;
+my $cosmos     = 0;
+my $custom     = 0; # see if ($custom) {} block at the end
+# Strange Horizons: all the defaults seem to be okay.
+
+$opt{'email'} = $my_email;
+
+$opt{'electronic'} = $electronic; # controls whether it prints email and DISPOSABLE
+$opt{'underline'} = !($baen || $cosmos || $anthologybuilder); # some magazines with e-subs (including Baen) don't want underlining
+$opt{'header'} = !$baen; # most don't say what they want; baen doesn't want headers; abyss and apex does
+
+if ($electronic) {
+  if ($cosmos) {
+    $opt{'font'} = 'Times New Roman'; # This is what the mac version of Word generates in an rtf. Cosmos specifically wants this font.
+  }
+  else {
+    $opt{'font'} = 'Courier New'; # Sam Hidaka at JBU has Courier New (12 pt) on his Windows machine, and the rtfs he generates have this.
+  }
+}
+else {
+  $opt{'font'} = 'Courier 10 Pitch'; # Of the monospaced fonts available in oo on ubuntu, this looks the best to me.
+  # When changing fonts, have to check whether wordcount comes out aligned correctly, and possibly fix it.
+}
+
+# 1=single-spacing, 2=double (Interzone and Coyote Wild want single)
+if ($interzone || $coyote || $cosmos) {
+  $opt{'spacing'} = 1;
+}
+else {
+  $opt{'spacing'} = 2;
+}
+
+$opt{'blank_between_paras'} = 0;
+$opt{'no_para_indent'} = 0;
+if ($coyote || $cosmos) {
+  $opt{'blank_between_paras'} = 1;
+  $opt{'no_para_indent'} = 1;
+}
+
+if ($custom) {
+  #$opt{'spacing'} = 1;
+  #$opt{'header'} = 0;
+  $opt{'underline'} = 0;
+}
+
+#############################################################################################################
+
+undef $/;
+
+my $text = <STDIN>;
+
+my $temp = "temp";
+open(F,">$temp") or die "$!";
+print F $text;
+close F;
+my $wordcount = `~/Documents/programming/scripts/wordcount <$temp`; # not sure why, but this fails unless I put in the full path (same for rtf2text)
+$wordcount =~ m/^(\d+)/;
+$wordcount = $1;
+system("rm $temp");
+
+my $r;
+if ($wordcount<20000) {$r=100}
+else {$r=1000}
+$wordcount = int($wordcount/$r+.5)*$r;
+if ($wordcount>1000) {$wordcount = int($wordcount/1000).','.(sprintf '%03d',$wordcount-int($wordcount/1000)*1000)}
+
+$text =~ m|\\begin{document}\n*([^\n]+)|;
+my $title = $1;
+
+print STDERR "title=$title, words=$wordcount\n";
+
+my $uc_title = uc($title);
+
+
+###########################################################################################################################
+
+# centered # for scene breaks
+
+my $scene_break = <<'STUFF';
+\s1\cf0\qc{#}
+STUFF
+
+my $header1 = <<'STUFF';
+{\header \pard\plain \s3\cf0\qr{\*\tlswg8236}\qr\tqc\tx4680{\*\tlswg8236}\tqr\tx9360\aspalpha\af3\afs24\lang255\dbch\af3\langfe255\hich\f2\fs24\lang1033\loch\f2\fs24\lang1033 {\loch\f2\fs24\lang1033\i0\b0 _AUTHOR_/\chpgn}
+\par }
+STUFF
+
+my $header2 = <<'STUFF';
+{\header \pard\plain \s3\cf0\qr{\*\tlswg8236}\qr\tqc\tx4680{\*\tlswg8236}\tqr\tx9360\aspalpha\af3\afs24\lang255\dbch\af3\langfe255\hich\f2\fs24\lang1033\loch\f2\fs24\lang1033 {\loch\f2\fs24\lang1033\i0\b0 _AUTHOR_/\chpgn}
+ }
+STUFF
+
+###########################################################################################################################
+
+my $template = <<'WUGGA';
+{\rtf1\ansi\deff0\adeflang1025
+{\fonttbl{\f0\froman\fprq2\fcharset0 Nimbus Roman No9 L{\*\falt Times New Roman};}{\f1\froman\fprq2\fcharset0 Nimbus Roman No9 L{\*\falt Times New Roman};}{\f2\fnil\fprq1\fcharset0 _FONT_;}{\f3\fnil\fprq2\fcharset0 Nimbus Sans L{\*\falt Arial};}}
+{\colortbl;\red0\green0\blue0;\red128\green128\blue128;}
+{\stylesheet{\s1\cf0\aspalpha\ql\af3\afs24\lang255\dbch\af3\langfe255\hich\f0\fs24\lang1033\loch\f0\fs24\lang1033\snext1 Normal;}
+{\s2\sa283\cf0\aspalpha\ql\af3\afs24\lang255\dbch\af3\langfe255\hich\f0\fs24\lang1033\loch\f0\fs24\lang1033\sbasedon1\snext2 Body Text;}
+{\s3\cf0{\*\tlswg8236}\tqc\tx4680{\*\tlswg8236}\tqr\tx9360\aspalpha\ql\af3\afs24\lang255\dbch\af3\langfe255\hich\f0\fs24\lang1033\loch\f0\fs24\lang1033\sbasedon1\snext3 header;}
+}
+{\info{\creatim\yr2007\mo3\dy24\hr10\min30}{\revtim\yr2007\mo3\dy24\hr11\min0}{\printim\yr1601\mo1\dy1\hr0\min0}{\comment StarWriter}{\vern6800}}\deftab709
+{\*\pgdsctbl
+{\pgdsc0\pgdscuse195\pgwsxn12240\pghsxn15840\marglsxn_MARGIN_L_\margrsxn_MARGIN_R_\margtsxn_MARGIN_T_\margbsxn_MARGIN_B_\headery0{\*\headeryb288\headerxl0\headerxr0\headeryh576}_HEADER1_
+\pgdscnxt0 Standard;}}
+\paperh15840\paperw12240\margl_MARGIN_L_\margr_MARGIN_R_\margt_MARGIN_T_\margb_MARGIN_B_\sectd\sbknone\pgwsxn12240\pghsxn15840\marglsxn_MARGIN_L_\margrsxn_MARGIN_R_\margtsxn_MARGIN_T2_\margbsxn_MARGIN_B_\headery1440_HEADER2_
+\ftnbj\ftnstart1\ftnrstcont\ftnnar\aenddoc\aftnrstcont\aftnstart1\aftnnrlc
+\pard\plain{\loch\f2\fs24\lang1033\i0\b0 Benjamin Crowell                                _WORDCOUNT_ words}
+\par\pard\plain{\loch\f2\fs24\lang1033\i0\b0 2233 Loma Alta Dr.}
+\par\pard\plain{\loch\f2\fs24\lang1033\i0\b0 Fullerton, CA 92833}
+\par\pard\plain{\loch\f2\fs24\lang1033\i0\b0 (714) 525-8466}
+\par\pard\plain{\loch\f2\fs24\lang1033\i0\b0 _EXTRA_}
+\par \pard\plain  
+\par \pard\plain  
+\par \pard\plain  
+\par \pard\plain  
+\par \pard\plain  
+\par \pard\plain  
+\par \pard\plain  
+\par \pard\plain  
+\par \pard\plain  
+\par \pard\plain  
+\par \pard\plain  
+\par \pard\plain \s2\cf0_SPACING_\qc\aspalpha\af3\afs24\lang255\dbch\af3\langfe255\hich\f2\fs24\lang1033\loch\f2\fs24\lang1033 {\loch\f2\fs24\lang1033\i0\b0 _TITLE_}
+\par \pard\plain \s2\cf0_SPACING_\qc\aspalpha\af3\afs24\lang255\dbch\af3\langfe255\hich\f2\fs24\lang1033\loch\f2\fs24\lang1033 {\loch\f2\fs24\lang1033\i0\b0 by _BYLINE_}
+\par \pard\plain  
+\par \pard\plain \s2\cf0_SPACING_\aspalpha\ql\af3\afs24\lang255\dbch\af3\langfe255\hich\f2\fs24\lang1033\loch\f2\fs24\lang1033{\loch\f2\fs24\lang1033\i0\b0\ulnone\ulc0\i0 \tab _TEXT_}
+\par }
+WUGGA
+
+my $between_paras = '}'."\n".'\par \pard\plain _SPACING_ {\loch\f2\fs24\lang1033\i0\b0 ';
+
+my $rtf = $template;
+
+if ($opt{'header'}) {
+  print STDERR "Header option is set to 1. Headers will be generated. Don't do this for Baen submissions.\n";
+  $rtf =~ s/_HEADER1_/$header1/;
+  $rtf =~ s/_HEADER2_/$header2/;
+}
+else {
+  print STDERR "Header option is set to 0. Headers will not be generated. This is correct for Baen submissions.\n";
+  $rtf =~ s/_HEADER1_//;
+  $rtf =~ s/_HEADER2_//;
+}
+if ($opt{'spacing'}==1) {
+  print STDERR "Single spacing is turned on (for Interzone).\n";
+}
+
+# the following are all in inches
+my %margin = ();
+$margin{'l'} = 1.25; # inches
+$margin{'r'} = 1.25; # inches
+$margin{'t'} = 1.; # inches
+$margin{'b'} = 1.; # inches
+$margin{'h'} = .4; # extra space for a header (if there is one)
+$rtf =~ s/_MARGIN_L_/20*72*$margin{'l'}/ge;
+$rtf =~ s/_MARGIN_R_/20*72*$margin{'r'}/ge;
+$rtf =~ s/_MARGIN_T_/20*72*$margin{'t'}/ge;
+$rtf =~ s/_MARGIN_B_/20*72*$margin{'b'}/ge;
+my $t2 = $margin{'t'};
+if ($opt{'header'}) {
+  $t2 += $margin{'h'};
+}
+$rtf =~ s/_MARGIN_T2_/20*72*$t2/ge;
+
+$rtf =~ s/_AUTHOR_/Crowell/g;
+$rtf =~ s/_BYLINE_/Benjamin Crowell/g;
+$rtf =~ s/_TITLE_/$title/g;
+$rtf =~ s/_TITLECAPS_/$uc_title/g;
+$rtf =~ s/_WORDCOUNT_/$wordcount/g;
+
+my $font = $opt{'font'};
+$rtf =~ s/_FONT_/$font/g; # 
+  # font sizes appear to be specified with a tag like \fs24, where the 24 is twice the point size
+
+if ($opt{'electronic'}) {
+  my $email = $opt{'email'};
+  $rtf =~ s/_EXTRA_/$email/g;
+}
+else {
+  $rtf =~ s/_EXTRA_/DISPOSABLE/g;
+}
+
+###########################################################################################################################
+
+$text =~ s|(\\begin{document}\n*)[^\n]+||;
+
+
+$text =~ s|\`\`|"|g;
+$text =~ s|\'\'|"|g;
+
+# To find codes when adding to this list, just make an rtf file with the char in it.
+$text =~ s/é/\\'e9/g; # e with acute accent
+$text =~ s/�\255/\\'ed/g; # i with acute accent
+$text =~ s/ñ/\\'f1/g; # n~
+$text =~ s/\302\241/\\'a1/g; # inverted !
+$text =~ s/\302\277/\\'bf/g; # inverted ?
+$text =~ s/\303\252/\\'ea/g; # e with circumflex accent
+$text =~ s/\303\250/\\'e8/g; # e with grave accent
+$text =~ s/\303\247/\\'e7/g; # c cedille
+$text =~ s/\303\240/\\'e0/g; # a with grave accent
+$text =~ s/\303\266/\\'f6/g; # a with grave accent
+$text =~ s/\303\243/\\'e3/g; # a with tilde
+
+if ($opt{'underline'}) {
+  print STDERR "Underlining option is set to 1. This is not what Baen wants.\n";
+  $text =~ s/\\emph{([^}]+)}/{\\ul\\ulc0 $1}/g;
+}
+else { # italics, which is what Baen wants
+  print STDERR "Underlining option is set to 0. Italics are being shown as italics, which is what Baen wants. \n";
+  $text =~ s/\\emph{([^}]+)}/{\\i $1}/g;
+}
+
+my $spacing = "\\sl480\\slmult1";
+if ($opt{'spacing'}==1) {
+  $spacing = '';
+}
+if ($opt{'blank_between_paras'}==1) {
+  $spacing = $spacing . '\par\pard\plain';
+}
+my $para_tab = "\\tab ";
+if ($opt{'no_para_indent'}==1) {
+  $para_tab = '';
+}
+
+$text =~ s/\\documentclass{story}//;
+$text =~ s/\\begin{center}END\\end{center}/\n\n\\tab \\tab \\tab \\tab END/;
+$text =~ s/\\begin{center}---\\end{center}/_SCENE_BREAK_/g;
+$text =~ s/\n/ \n/g;
+$text =~ s/\\end{document}//;
+$text =~ s/( \n){2,}(?!_SCENE_BREAK_)/$between_paras$para_tab/g; # don't want tab before scene break character
+$text =~ s/( \n){2,}_SCENE_BREAK_/$between_paras$scene_break/g;
+$text =~ s/\$(<|>)\$/$1/g;
+$text =~ s/\\fontfamily{\w+}//g;
+$text =~ s/\\selectfont\\textbf//g;
+
+$text =~ s|\.\~|. |g;
+$text =~ s|\-\-\-|\\u8212\\'14|g; # em-dash is unicode 2014; this is how Baen wants them, not as --; another thing that looks identical is \\u8212\\'2d
+  # This looks pretty narrow in courier, but it really does seem to be the right character; in a proportional font, it's wide.
+
+$text =~ s|\$\\ldots([^\$]*)\$|...$1|g;
+$text =~ s|\\:| |g;
+$text =~ s|\.\.\.|\. \. \.|g; # baen's preferred format for an ellipsis that represents trailing off of speech (http://bar.baen.com/WB/default.asp?action=9&read=91676&fid=67)
+$text =~ s|\`|'|g;
+
+# tex escapes that are unnecessary and illegal in rtf; may need to add more in here as they turn up
+$text =~ s|\\[%&]|&|g;
+
+
+$rtf =~ s/_TEXT_/$text/;
+
+$rtf =~ s/_SPACING_/$spacing/g;
+
+$rtf =~ s/\\\$/\$/g;
+
+#check_rtf_validity($rtf);
+
+print $rtf;
+
+print STDERR "Warning: opening an rtf in OOo and making changes can cause the new rtf to be unreadable!!!!!!!!!\n";
+print STDERR "Checklist: scan whole document visually; wordcount right aligned; correct e-mail address for this year; accents on foreign words\n";
+
+sub check_rtf_validity {
+  my $rtf = shift;
+  my $f = "/tmp/check_rtf_validity.rtf";
+  my $g = "/tmp/check_rtf_validity.txt";
+  open(F,">$f") or die "error opening file $f for output";
+  print F $rtf;
+  close F;
+  $SIG{ALRM} = sub { die "timeout" }; # inside eval, will set $@ to "timeout"
+  eval {
+    alarm(10); # conversion shouldn't take longer than 10 seconds
+    system("/usr/local/bin/rtf2text $f >$g");  # not sure why, but this fails unless I put in the full path (same for wordcount)
+    alarm(0);
+  };
+  my $okay = 1;
+  if ($@) {
+    $okay = 0;
+    if ($@ =~ /timeout/) {
+      print STDERR "There was an timeout error converting your RTF file to plain text.\n";
+    }
+    else {
+      alarm(0);
+      print STDERR "There was an error converting your RTF, $@.\n";
+    }
+  }
+  unlink($f,$g);
+  if ($okay) {  
+    return;
+  }
+  else {
+    print STDERR <<ERROR
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+Error in format of rtf output. This typically happens because of a tex control sequence. To debug it, try doing
+  rtf2text foo.rtf
+and seeing if you get any output. You may need to add more filtering at the line in rtf_ms
+with the comment "tex escapes that are unnecessary and illegal in rtf".
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+*********************************************************************************************************************
+ERROR
+  }
+}

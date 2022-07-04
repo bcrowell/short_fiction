@@ -1,0 +1,59 @@
+#!/usr/bin/perl
+
+use strict;
+
+local $/; # slurp whole file
+
+my $t = <STDIN>;
+
+my @section = split /={4,}/,$t;
+
+my %column_title;
+my @columns;
+my @column_titles;
+
+my @column_defs = split /\n/,(shift @section);
+foreach my $d(@column_defs) {
+  my ($name,$title) = split /=/,$d;
+  push @columns,$name;
+  push @column_titles,$title;
+  $column_title{$name} = $title;
+}
+
+my $n_cols = @columns;
+
+my $width = 24.7/$n_cols;
+print <<HEADER;
+\\documentclass[10pt]{article}
+\\usepackage[landscape,left=0.2cm,right=0.5cm,top=0.5cm,bottom=0cm]{geometry}
+\\usepackage{longtable}
+\\begin{document}
+\\pagestyle{empty}
+HEADER
+
+print "\\begin{longtable}{".("p{${width}cm}"x$n_cols)."}\n\\hline\n";
+print (join '&',@column_titles) ;
+print "\\endhead\\hline\\hline\n";
+foreach my $s(@section) {
+  my @cells = split /\-{4,}/,$s;
+  my %row = ();
+  foreach my $cell(@cells) {
+    $cell =~ /(\w+):(.*)/s or die "syntax error in cell, $cell";
+    my ($name,$text) = ($1,$2);
+    $row{$name} = $text;
+    #print "$name => $text\n";
+    die "illegal backslash characters in text, $text" if $text=~/\\/;
+    die "illegal column, $name" unless exists $column_title{$name};
+  }
+  my @latex = ();
+  foreach my $col(@columns) {
+    my $text = '-';
+    $text = $row{$col} if exists $row{$col};
+    $text =~ s/\&/\\&/g;
+    push @latex,$text;
+  }
+  print (join '&',@latex)."\\\\\n";
+  print "\\\\";
+  print "\\hline \n";
+}
+print "\\end{longtable}\\end{document}\n";

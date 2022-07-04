@@ -1,0 +1,16 @@
+#!/usr/bin/perl
+
+use strict;
+
+# takes plain text output by 'critters' script, the format oww wants, i.e., converts _foo_ to <i>foo</i>, section breaks to <br> on separate line
+
+undef $/;
+
+my $text = <STDIN>;
+
+$text =~ s@_([^_]+)_@<i>$1</i>@g;
+#$text =~ s@^\s*\#@<br>@g;
+$text =~ s@[ \t]*\#@<br>@g;
+#$text =~ s@@@g;
+
+print $text;

@@ -1,0 +1,90 @@
+#!/usr/bin/perl
+
+use strict;
+
+# takes HTML output by 'outliner' script, and converts it to
+# latex.
+# To add an accented character, see short_story_ms.
+
+undef $/;
+
+my $text = <STDIN>;
+
+$text =~ s|\<\!DOCTYPE.*<body>||s;
+$text =~ s|</body>||;
+$text =~ s|</html>||;
+
+# eliminate toc:
+$text =~ s|<a name=\"\d+\-\d+(.*)</a>||g;
+
+# chapter headers:
+$text =~ s|<a name=\"\d+\"><h1><a href="#\d+">(?:\d+\.)?\s*(.*)</h1></a>|<doublenewline>\\chapter{$1}|g;
+
+$text =~ s@<a\s+href="[^"]+">([^<]+)</a>@$1@g; # remove hyperlinks
+$text =~ s/\$/\\\$/g;
+$text =~ s|\&lt\;|\$\<\$|g;
+$text =~ s|\&gt\;|\$\>\$|g;
+$text =~ s|\&amp\;|\\&|g;
+$text =~ s|<i>([^<]*)</i>|\\emph{$1}|gs;
+$text =~ s|<b>([^<]*)</b>|{\\fontfamily{ptm}\\selectfont\\textbf{$1}}|gs;
+$text =~ s|<hr>||g;
+$text =~ s|<p\s+class="bio">([^<]+)</p>|\\noindent{\\sffamily $1}\\vspace{8mm}\n\n|gs;
+$text =~ s|<p>||g;
+$text =~ s|</p>|\n|g;
+$text =~ s|_|\\_|g;
+$text =~ s|<sub>([^<]+)</sub>|\$_{$1}\$|g;
+$text =~ s|<sup>([^<]+)</sup>|\$^{$1}\$|g;
+$text =~ s|\n\n\n+|\n\n|g;
+$text =~ s|^\n+||;
+$text =~ s|^[ ]+||gm;
+$text =~ s|\&rsquo\;\&rdquo\;|\&rsquo\;\\thinspace\&rdquo\;|g;
+$text =~ s|\&ldquo\;|\`\`|g;
+$text =~ s|\'\&rdquo\;|\'\\thinspace\'\'|g; # quotes inside quotes
+$text =~ s|\&rdquo\;|\'\'|g;
+$text =~ s|\&lsquo\;|\`|g;
+$text =~ s|\&rsquo\;|\'|g;
+$text =~ s|\&mdash\;|---|g;
+$text =~ s|\-\-\- \'\'|---''|g;
+$text =~ s|\.\.\.|\$\\ldots\\:\$|g;
+$text =~ s|%|\\%|g;
+
+$text =~ s|<div class="center">([^<]*)</div>|\\begin{center}$1\\end{center}|g;
+
+if (!( $text=~m|THE END|)) { $text = $text . 'THE END'}
+$text =~ s|THE END|\n\\begin{center}THE END\\end{center}|;
+$text =~ s|THE END|END|g;
+
+$text =~ s/((Mr|Mrs|Ms|Dr)\.)\n/$1 /g; # otherwise Mr. at the end of a line doesn't get handled correctly below
+$text =~ s/(Mr|Mrs|Ms|Dr)\. /$1\.\~/g;
+
+$text =~ s|([^\n])\n([^\n])|$1 $2|g;
+$text =~ s|([^\n]{1,69}) |$1\n|g;
+# leaves stray words on ends of paragraphs, so fix those:
+$text =~ s|([^\n]+)\n([^\s]+)\n\n|$1 $2\n\n|g; # combine last two lines of every paragraph
+
+my $words = 0;
+while ($text=~m|[^\s]+|g) {
+  ++$words;
+}
+
+$text =~ s/<doublenewline>/\n/g;
+
+$text =~ s/(\\chapter{)/\\tableofcontents\n\n$1/; # kludge
+
+$text =~ s|\$<\$sub\$>\$([^<]*)\$<\$/sub\$>\$|\$_{$1}\$|g;
+
+#One \emph{H. sap}. h
+
+#$text =~ s/\.\s+([^A-Z \n]*[a-z])/.~$1/g;
+$text =~ s/\.\s+([a-z])/.~$1/g;
+
+print <<HEADER;
+\\documentclass{story}
+
+\\begin{document}
+
+HEADER
+
+print $text;
+
+print "\n\n\\end{document}\n\n";

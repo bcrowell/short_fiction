@@ -1,0 +1,21 @@
+#!/usr/bin/perl
+
+use strict;
+
+# bug: "crlf_$file" doesn't work if $file is something like ../a.a
+
+
+if (!@ARGV) {
+  print "Usage:  reparagraph file\n";
+  print "Changes the file in place.\n";
+  exit;
+}
+
+my $file = $ARGV[0];
+if (! -e $file) {die "File $file does not exist"}
+
+open(F,"<$file") or die "Unable to open file $file for input, $!\n";
+
+system("deparagraph <$file | paragraph >crlf_$file")==0 or die "error, $!";
+system "mv $file $file~";
+system "mv crlf_$file $file";

@@ -1,0 +1,93 @@
+#!/usr/bin/perl
+
+use strict;
+
+# takes no-frills html output by "outliner" script, and converts it to something formatted for public display on my web site
+# reads stdin, writes stdout
+# expects a file called meta to exist in cwd, containing key-value pairs
+#   mandatory keys:
+#      orig - tells where it was originally published  (remember to hyperlink the name of the magazine)
+#      copyright - year of copyright
+#      name - the short filename of the story, e.g., teardown
+#   optional keys:
+#      preamble - text that appears after orig
+
+my %meta;
+open(F,"<meta") or die "unable to open meta file, see comments in source code about what goes in there";
+while (my $meta = <F>) {
+  $meta =~ /(\w+)\s*=\s*([^\s].*)/;
+  $meta{$1} = $2;  
+}
+close F;
+
+#----------------------------------------------------
+
+
+undef $/;
+
+
+my $t = <STDIN>;
+
+#----------------------------------------------------
+
+# first <p>...</p> is title; can't have html tags embedded
+
+$t =~ m@<p>\s*([^<\s][^<]+[^<\s])\s*</p>@s;
+my $title = $1;
+$t =~ s@<p>[^<]+</p>@___TOP___@s;
+
+# find end
+
+$t =~ s@(</body>\s*</html>)@\n___BOTTOM___\n$1@;
+
+# find html head
+
+$t =~ s@<head>@<head>___HEAD___@;
+
+foreach my $marker('TOP','BOTTOM','HEAD') {
+  die "failed to find $marker" unless $t=~/___${marker}___/;
+}
+
+#----------------------------------------------------
+
+
+my $byline_link = <<BYLINE_LINK;
+<a href="http://www.lightandmatter.com/area4author.html">Benjamin Crowell</a>
+BYLINE_LINK
+
+my $head = <<HEAD;
+<title>"$title" by Benjamin Crowell</title>
+<link rel="stylesheet" type="text/css" href="../new.css" media="all" >
+<link rel="stylesheet" type="text/css" href="../fiction.css" media="all" >
+HEAD
+
+my $bottom = <<BOTTOM;
+<p class="footer">(c) $meta{copyright} by $byline_link</p>
+<p class="footer">"$title" is available under a fairly liberal licensing scheme, explained at 
+<a href="http://www.lightandmatter.com/personal/fiction_licensing.html">http://www.lightandmatter.com/personal/fiction_licensing.html</a>.
+If you redistribute it, please include a link to this web page, http://www.lightandmatter.com/fiction/$meta{name}.html.</p>
+</div>
+BOTTOM
+
+my $preamble = '';
+$preamble = ' '.$meta{preamble} if exists $meta{preamble};
+
+my $top = <<TOP;
+<div class="outer_container">
+<h1>$title</h1>
+<p class="byline">by $byline_link</p>
+<p class="byline">Originally published in $meta{orig}.$preamble</p>
+TOP
+
+$t =~ s@___HEAD___@$head@;
+$t =~ s@___BOTTOM___@$bottom@;
+$t =~ s@___TOP___@$top@;
+
+#----------------------------------------------------
+
+$t =~ s/ \-\- / &mdash; /g;
+$t =~ s@<div class="center">&mdash;</div>@<div class="scene_break">&mdash;</div>@g;
+
+#----------------------------------------------------
+
+print $t;

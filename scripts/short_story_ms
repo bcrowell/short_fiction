@@ -1,0 +1,135 @@
+#!/usr/bin/perl
+
+# Takes latex output by novel_to_latex, and fiddles with it to make it appropriate for
+# a short story ms.
+# options:
+#   -s ... single spacing, and no extra space before title (boolean)
+#   -e ... give email address (boolean) (default is none, because I use pdf for paper subs, and for those I'd rather have paper replies)
+#   -p ... use a proportionally spaced font (boolean)
+
+use strict;
+use Getopt::Std;
+
+BEGIN {
+  push @INC,"/home/bcrowell/Documents/programming/scripts";
+}
+our $my_email;
+require "my_email.pl";
+die "\$my_email not set" unless $my_email;
+
+my %args;
+getopts("sep",\%args); # from Getopt::Std; 
+
+my $single_space = $args{'s'};
+my $do_email = $args{'e'};
+my $monospaced = !$args{'p'};
+
+my $line_spacing = $single_space ? '' : "\\setstretch{2.0}% double spacing";
+
+undef $/;
+
+my $text = <STDIN>;
+
+my $temp = "temp";
+open(F,">$temp") or die "$!";
+print F $text;
+close F;
+my $wordcount = `wordcount <$temp`;
+$wordcount =~ m/^(\d+)/;
+$wordcount = $1;
+system("rm $temp");
+
+my $r;
+if ($wordcount<20000) {$r=100}
+else {$r=1000}
+$wordcount = int($wordcount/$r+.5)*$r;
+if ($wordcount>1000) {$wordcount = int($wordcount/1000).','.(sprintf '%03d',$wordcount-int($wordcount/1000)*1000)}
+
+#{\fontfamily{ptm}\selectfont\textbf{A Large Bucket, and (Mostly
+#Accidental) Godlike Mastery of Spacetime}}
+
+$text =~ m|\\begin{document}\n*([^\n]+)|;
+my $title = $1;
+
+print STDERR "title=$title, words=$wordcount\n";
+
+my $uc_title = uc($title);
+
+my $short_title = $title;
+if ($title=~/^A Large Bucket/) {$short_title = "A Large Bucket"}
+
+my $mark = "\\hfill \\ttfamily \\upshape Crowell / $short_title / ";
+my $email = '';
+if ($do_email) {
+  $email = "\n\\noindent $my_email\\\\";
+}
+my $ttfamily = $monospaced ? "\\ttfamily" : '';
+my $space_before_title = $single_space ? '' : "\\vspace{49mm}";
+my $sloppypar = $monospaced ? '' : "\\sloppypar";
+my $stuff = <<FOO;
+$ttfamily
+
+\\markboth{$mark}{$mark}
+
+\\noindent Benjamin Crowell \\hfill $wordcount words\\\\
+\\noindent 2233 Loma Alta Dr.\\\\
+\\noindent Fullerton, CA 92833\\\\
+\\noindent (714) 525-8466\\\\
+\\noindent DISPOSABLE\\\\
+$email
+$space_before_title
+$line_spacing
+
+\\begin{center}
+$title\\\\
+\\vspace{0mm}
+by Benjamin Crowell
+\\end{center}
+\\vspace{8mm}
+$sloppypar
+
+FOO
+
+$text =~ s|(\\begin{document}\n*)[^\n]+|$1 $stuff|;
+
+$text =~ s/\\begin{center}---\\end{center}/\\hspace{2.5in}\\#/g; # using center environment causes extra space above and below
+
+$text =~ s|\ *\-\-\- *|\-\-|g; # http://www.shunn.net/format/story.html says not to put spaces around an m-dash
+
+if ($monospaced) {
+  $text =~ s|\`\`|"|g;
+  $text =~ s|\'\'|"|g;
+}
+
+$text =~ s|\' \"|\\nolinebreak[4]'\\nolinebreak[4]"|g; # otherwise ' and " can end up on separate lines
+
+if (0) { # doesn't really work that well
+$text =~ s|(?<=\w)\'(?=\w)|\\hspace{.7mm plus .2mm minus .2mm}\\nolinebreak[4]\$^\\shortmid\$\\nolinebreak[4]\\hspace{.7mm plus .2mm minus .2mm}|g; # apostrophe
+$text =~ s|(?<!\w)\'(?=\w)|\$^\\shortmid\$\\nolinebreak[4]\\hspace{.7mm plus .2mm minus .2mm}|g; # single quote at beginning of word
+$text =~ s|\'(?!\w)|\\hspace{.7mm plus .2mm minus .2mm}\$^\\shortmid\$\\hspace{.7mm plus .2mm minus .2mm}|g; # single quote at end of word
+}
+
+$text =~ s/([^\\])&/$1\\&/g;
+
+
+$text =~ s/é/\\'{e}/g; # has to be after ' handling above
+$text =~ s/É/\\'{E}/g;
+$text =~ s/ê/\\^{e}/g;
+$text =~ s/è/\\`{e}/g;
+$text =~ s/�/\\`{e}/g;
+$text =~ s/í/\\'{i}/g;
+$text =~ s/ô/\\^{o}/g;
+$text =~ s/ñ/\\~{n}/g;
+$text =~ s/ç/\\c{c}/g;
+$text =~ s/à/\\`{a}/g;
+$text =~ s/ã/\\~{a}/g;
+$text =~ s/ö/\\"{o}/g;
+$text =~ s/ö/\\"{e}/g; # � ë
+$text =~ s/ë/\\"{e}/g; # � ë
+$text =~ s/¡/!`/g;
+$text =~ s/¿/?`/g;
+
+$text =~ s/\\tableofcontents//g;
+$text =~ s/\\chapter{([\w\d ,\.\:\'\"]*)}/\\pagebreak[3]\\begin{center}-- $1 --\\end{center}/g;
+
+print $text;

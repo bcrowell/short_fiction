@@ -1,0 +1,87 @@
+#!/usr/bin/perl
+
+use strict;
+
+# takes HTML output by 'outliner' script, and converts it to plain text format
+# used by critters.org
+
+undef $/;
+
+my $text = <STDIN>;
+
+$text =~ s|\<\!DOCTYPE.*<body>||s;
+$text =~ s|\</body\>\</html\>||s;
+
+# eliminate toc:
+$text =~ s|<a name=\"\d+\-\d+(.*)</a>||g;
+
+# chapter headers:
+$text =~ s|<a name=\"\d+\"><h1><a href="#\d+">(.*)</h1></a>|<doublenewline>$1|g;
+
+my $x = quotemeta('<div class="center">&mdash;</div>');
+$text =~ s|$x|SCENEBREAK|g;
+
+$text =~ s|\&lt\;|\<|g;
+$text =~ s|\&gt\;|\>|g;
+$text =~ s|<i>([^<]*)</i>|_$1_|gs;
+$text =~ s|<b>(.*)</b>|$1|gs;
+$text =~ s|<hr>||g;
+$text =~ s|</p>|\n|g;
+$text =~ s|<p>||g;
+$text =~ s|\n\n\n+|\n\n|g;
+$text =~ s|^\n+||;
+$text =~ s|^[ ]+||gm;
+$text =~ s|\&[lr]dquo\;|"|g;
+$text =~ s|\&[lr]squo\;|'|g;
+$text =~ s|\&mdash\;|--|g;
+
+
+
+$text =~ s|([^\n])\n([^\n])|$1 $2|g;
+$text =~ s|([^\n]{1,69}) |$1\n|g;
+# leaves stray words on ends of paragraphs, so fix those:
+$text =~ s|([^\n]+)\n([^\s]+)\n\n|$1 $2\n\n|g; # combine last two lines of every paragraph
+my @old;
+my @new;
+while ($text =~ m|([^\n]{71,})\n\n|g) { # look for lines at end of para that are too long now
+  my $old = $1;
+  my $new = $old;
+  $new =~ s|(.{1,69}) (.*)|$1\n$2|;
+  push @old,$old;
+  push @new,$new;
+}
+for (my $i=0; $i<@old; $i++) {
+  my $old = $old[$i];
+  my $new = $new[$i];
+  $old =~ s|([.?*+\-()])|\\$1|g; # escape special characters
+  $text =~ s|$old|$new|;
+}
+
+my $words = 0;
+while ($text=~m|[^\s]+|g) {
+  ++$words;
+}
+
+$text =~ s/<doublenewline>/\n/g;
+
+$text =~ s/é/e'/g;
+$text =~ s/è/e`/g;
+$text =~ s/ñ/n\~/g;
+$text =~ s/ç/c/g;
+
+# Critters' script messes up on < and >:
+$text =~ s/\</\_/g;
+$text =~ s/\>/\_/g;
+
+$text =~ s/SCENEBREAK/                            #/g;
+
+$text =~ s/^([^\n]+)\n/  $1\n  by Benjamin Crowell\n/;
+
+#print "title: <------------------------- insert\n";
+#print "author: Benjamin Crowell\n";
+#print "genre: SF\n";
+#print "words: $words\n";
+#print "dr: No <------------------------- check\n";
+#print "\n";
+
+print $text;
